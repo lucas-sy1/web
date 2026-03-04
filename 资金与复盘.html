@@ -1,0 +1,518 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>我的 Meme 交易追踪 & 每日复盘 (USD)</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+  <style>
+    body { font-family: system-ui, -apple-system, "Microsoft YaHei", sans-serif; }
+    .profit { color: #10b981; }
+    .loss   { color: #ef4444; }
+    .flat   { color: #9ca3af; }
+    table { border-collapse: collapse; }
+    th, td { padding: 10px; text-align: left; }
+    .warning-banner {
+      background: linear-gradient(to right, #991b1b, #7f1d1d);
+      color: white;
+      font-weight: bold;
+      text-align: center;
+      padding: 16px;
+      border-radius: 12px;
+      margin-bottom: 24px;
+      box-shadow: 0 4px 12px rgba(153, 27, 27, 0.4);
+      font-size: 1.25rem;
+    }
+    .tag { 
+      display: inline-block; 
+      background: #374151; 
+      color: #e5e7eb; 
+      padding: 2px 8px; 
+      border-radius: 12px; 
+      font-size: 0.75rem; 
+      margin-right: 4px; 
+      margin-bottom: 4px; 
+    }
+  </style>
+</head>
+<body class="bg-zinc-950 text-zinc-100 min-h-screen">
+  <div class="max-w-6xl mx-auto p-6">
+    <div class="flex justify-between items-center mb-6">
+      <h1 class="text-4xl font-bold flex items-center gap-3">
+        🚀 我的 Meme 交易追踪 & 每日复盘
+      </h1>
+      <div class="flex items-center gap-3">
+        <label class="text-sm">初始资金 $</label>
+        <input id="initial" type="number" value="10000" 
+               class="bg-zinc-900 border border-zinc-700 rounded px-3 py-2 w-40 text-right text-xl font-medium">
+        <button onclick="saveInitial()" 
+                class="bg-emerald-600 hover:bg-emerald-700 px-4 py-2 rounded font-medium">
+          保存
+        </button>
+      </div>
+    </div>
+
+    <div class="warning-banner">
+      ⚠️ 保住本金，切勿 FOMO
+    </div>
+
+    <div class="bg-zinc-900 border border-zinc-800 rounded-2xl p-6 mb-8">
+      <div class="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-6 gap-4">
+        <div>
+          <label class="block text-sm text-zinc-400 mb-1">日期</label>
+          <input id="date" type="date" class="w-full bg-zinc-800 border border-zinc-700 rounded px-4 py-3 text-lg">
+        </div>
+        <div>
+          <label class="block text-sm text-zinc-400 mb-1">币种</label>
+          <input id="coin" type="text" placeholder="$PEPE / $WIF（可选）" 
+                 class="w-full bg-zinc-800 border border-zinc-700 rounded px-4 py-3 text-lg">
+        </div>
+        <div>
+          <label class="block text-sm text-zinc-400 mb-1">当日交易盈亏 ($)</label>
+          <input id="change" type="number" step="0.01" placeholder="正=盈利 / 负=亏损" 
+                 class="w-full bg-zinc-800 border border-zinc-700 rounded px-4 py-3 text-lg">
+        </div>
+        <div>
+          <label class="block text-sm text-zinc-400 mb-1">当日充值 ($)</label>
+          <input id="deposit" type="number" step="0.01" value="0" 
+                 class="w-full bg-zinc-800 border border-zinc-700 rounded px-4 py-3 text-lg">
+        </div>
+        <div>
+          <label class="block text-sm text-zinc-400 mb-1">当日提现 ($)</label>
+          <input id="withdrawal" type="number" step="0.01" value="0" 
+                 class="w-full bg-zinc-800 border border-zinc-700 rounded px-4 py-3 text-lg">
+        </div>
+        <div class="lg:col-span-3">
+          <label class="block text-sm text-zinc-400 mb-1">今日复盘笔记</label>
+          <textarea id="notes" rows="2" placeholder="心得、教训、KOL、rug..." 
+                    class="w-full bg-zinc-800 border border-zinc-700 rounded px-4 py-3 resize-none"></textarea>
+        </div>
+      </div>
+
+      <div class="mt-4">
+        <label class="block text-sm text-zinc-400 mb-2">当天主要情绪 / 行为（可多选）</label>
+        <div class="flex flex-wrap gap-2" id="tags-container">
+          <label class="flex items-center gap-1 text-sm"><input type="checkbox" value="FOMO追高"> FOMO追高</label>
+          <label class="flex items-center gap-1 text-sm"><input type="checkbox" value="恐慌割肉"> 恐慌割肉</label>
+          <label class="flex items-center gap-1 text-sm"><input type="checkbox" value="听KOL"> 听KOL</label>
+          <label class="flex items-center gap-1 text-sm"><input type="checkbox" value="自己研究"> 自己研究</label>
+          <label class="flex items-center gap-1 text-sm"><input type="checkbox" value="rug受害"> rug受害</label>
+          <label class="flex items-center gap-1 text-sm"><input type="checkbox" value="被snipe"> 被snipe</label>
+          <label class="flex items-center gap-1 text-sm"><input type="checkbox" value="叙事驱动"> 叙事驱动</label>
+          <label class="flex items-center gap-1 text-sm"><input type="checkbox" value="纯赌量"> 纯赌量</label>
+        </div>
+      </div>
+
+      <button onclick="addEntry()" 
+              class="mt-6 w-full bg-emerald-600 hover:bg-emerald-700 py-4 rounded-xl text-xl font-bold transition">
+        ✅ 记录今天
+      </button>
+    </div>
+
+    <div id="stats" class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-8 gap-4 mb-8"></div>
+
+    <div class="bg-zinc-900 border border-zinc-800 rounded-2xl p-6 mb-8">
+      <h2 class="text-xl font-semibold mb-4">账户资金曲线（含充值/提现）</h2>
+      <canvas id="fundChart" height="120"></canvas>
+    </div>
+
+    <div class="bg-zinc-900 border border-zinc-800 rounded-2xl overflow-hidden mb-8">
+      <div class="flex justify-between items-center p-6 border-b border-zinc-800">
+        <h2 class="text-xl font-semibold">历史记录</h2>
+        <div class="flex gap-3">
+          <button onclick="exportCSV()" class="bg-zinc-800 hover:bg-zinc-700 px-5 py-2 rounded-lg text-sm">CSV</button>
+          <button onclick="exportExcel()" class="bg-green-700 hover:bg-green-800 px-5 py-2 rounded-lg text-sm font-medium">Excel</button>
+          <button onclick="clearAll()" class="bg-red-600/80 hover:bg-red-700 px-5 py-2 rounded-lg text-sm">清空</button>
+        </div>
+      </div>
+      <div class="overflow-x-auto">
+        <table class="w-full" id="table">
+          <thead class="bg-zinc-950">
+            <tr>
+              <th class="font-normal text-zinc-400">日期</th>
+              <th class="font-normal text-zinc-400">币种</th>
+              <th class="font-normal text-zinc-400 text-right">交易盈亏</th>
+              <th class="font-normal text-zinc-400 text-right">充值</th>
+              <th class="font-normal text-zinc-400 text-right">提现</th>
+              <th class="font-normal text-zinc-400 text-right">余额</th>
+              <th class="font-normal text-zinc-400">标签</th>
+              <th class="font-normal text-zinc-400">笔记</th>
+              <th class="w-16"></th>
+            </tr>
+          </thead>
+          <tbody id="tbody" class="text-sm"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="text-center text-zinc-500 text-xs mt-4">
+      数据保存在浏览器 • 建议每周导出 Excel 备份到云盘
+    </div>
+  </div>
+
+  <!-- 笔记详情弹窗 -->
+  <div id="noteModal" class="fixed inset-0 bg-black bg-opacity-70 hidden flex items-center justify-center z-50"
+       onclick="if(event.target === this) closeModal()">
+    <div class="bg-zinc-900 border border-zinc-700 rounded-2xl p-6 max-w-2xl w-full mx-4 max-h-[80vh] overflow-y-auto relative">
+      <button onclick="closeModal()" class="absolute top-4 right-4 text-zinc-400 hover:text-white text-2xl">×</button>
+      <h3 class="text-xl font-bold mb-4">完整复盘笔记</h3>
+      <div id="modalNoteContent" class="text-zinc-300 whitespace-pre-wrap break-words"></div>
+    </div>
+  </div>
+
+  <script>
+    let initialCapital = 10000;
+    let entries = [];
+    let sortedEntries = [];
+    let chartInstance = null;
+
+    function updateSortedEntries() {
+      sortedEntries = [...entries].sort((a, b) => 
+        a.date.localeCompare(b.date) || a.id - b.id
+      );
+    }
+
+    function loadData() {
+      try {
+        const saved = localStorage.getItem('memeTrackerUSD_ZH_v2');
+        if (saved) {
+          const data = JSON.parse(saved);
+          initialCapital = (typeof data.initial === 'number' && !isNaN(data.initial)) ? data.initial : 10000;
+          entries = Array.isArray(data.entries) ? data.entries : [];
+        } else {
+          const old = localStorage.getItem('memeTrackerUSD_ZH');
+          if (old) {
+            const oldData = JSON.parse(old);
+            initialCapital = oldData.initial || 10000;
+            entries = (oldData.entries || []).map(e => ({
+              ...e,
+              coin: e.coin || "",
+              tags: e.tags || []
+            }));
+            localStorage.setItem('memeTrackerUSD_ZH_v2', JSON.stringify({initial: initialCapital, entries}));
+            localStorage.removeItem('memeTrackerUSD_ZH');
+          }
+        }
+      } catch (e) {
+        console.error('读取 localStorage 失败', e);
+        initialCapital = 10000;
+        entries = [];
+      }
+
+      updateSortedEntries();
+      document.getElementById('initial').value = initialCapital;
+      document.getElementById('date').value = new Date().toISOString().split('T')[0];
+      renderAll();
+    }
+
+    function saveData() {
+      localStorage.setItem('memeTrackerUSD_ZH_v2', JSON.stringify({
+        initial: initialCapital,
+        entries: entries
+      }));
+    }
+
+    function saveInitial() {
+      const val = parseFloat(document.getElementById('initial').value);
+      if (isNaN(val) || val < 0) {
+        alert('请输入有效的正数初始资金');
+        return;
+      }
+      initialCapital = val;
+      saveData();
+      renderAll();
+    }
+
+    function getSelectedTags() {
+      return Array.from(document.querySelectorAll('#tags-container input:checked'))
+                  .map(cb => cb.value);
+    }
+
+    function addEntry() {
+      const date = document.getElementById('date').value;
+      const coin = (document.getElementById('coin').value || '').trim();
+      const change = parseFloat(document.getElementById('change').value) || 0;
+      const deposit = parseFloat(document.getElementById('deposit').value) || 0;
+      const withdrawal = parseFloat(document.getElementById('withdrawal').value) || 0;
+      const notes = document.getElementById('notes').value.trim();
+      const tags = getSelectedTags();
+
+      if (!date) return alert('请选择日期');
+
+      entries.push({
+        id: Date.now(),
+        date,
+        coin,
+        change,
+        deposit,
+        withdrawal,
+        notes: notes || '无笔记',
+        tags
+      });
+
+      updateSortedEntries();
+      saveData();
+      renderAll();
+
+      document.getElementById('coin').value = '';
+      document.getElementById('change').value = '';
+      document.getElementById('deposit').value = '0';
+      document.getElementById('withdrawal').value = '0';
+      document.getElementById('notes').value = '';
+      document.querySelectorAll('#tags-container input').forEach(cb => cb.checked = false);
+    }
+
+    function deleteEntry(id) {
+      if (!confirm('确定删除？')) return;
+      entries = entries.filter(e => e.id !== id);
+      updateSortedEntries();
+      saveData();
+      renderAll();
+    }
+
+    function calculateCumulative() {
+      let balance = initialCapital;
+      return sortedEntries.map(e => {
+        balance += e.deposit - e.withdrawal + e.change;
+        return { ...e, balance };
+      });
+    }
+
+    function showFullNote(noteText) {
+      document.getElementById('modalNoteContent').textContent = noteText;
+      document.getElementById('noteModal').classList.remove('hidden');
+    }
+
+    function closeModal() {
+      document.getElementById('noteModal').classList.add('hidden');
+    }
+
+    function renderStats() {
+      const cum = calculateCumulative();
+      const finalBal = cum.length > 0 ? cum[cum.length - 1].balance : initialCapital;
+
+      const totalDays = entries.length;
+      const totalPL = entries.reduce((s, e) => s + e.change, 0);
+      const traded = entries.filter(e => e.change !== 0);
+      const wins = traded.filter(e => e.change > 0).length;
+      const winRate = traded.length ? ((wins / traded.length) * 100).toFixed(1) : '—';
+
+      const coinPL = {};
+      entries.forEach(e => {
+        if (e.coin && e.coin.trim()) {
+          coinPL[e.coin] = (coinPL[e.coin] || 0) + e.change;
+        }
+      });
+      const topCoins = Object.entries(coinPL)
+        .sort(([,a], [,b]) => b - a)
+        .slice(0, 5)
+        .map(([coin, pl]) => ({coin, pl}));
+
+      const tagCount = {};
+      entries.forEach(e => e.tags.forEach(t => tagCount[t] = (tagCount[t] || 0) + 1));
+      const topTags = Object.entries(tagCount)
+        .sort(([,a], [,b]) => b - a)
+        .slice(0, 3)
+        .map(([tag, count]) => ({tag, count}));
+
+      let html = `
+        <div class="bg-zinc-900 border border-zinc-800 rounded-2xl p-4">
+          <div class="text-zinc-400 text-xs">交易天数</div>
+          <div class="text-2xl font-bold">${totalDays}</div>
+        </div>
+        <div class="bg-zinc-900 border border-zinc-800 rounded-2xl p-4">
+          <div class="text-zinc-400 text-xs">胜率</div>
+          <div class="text-2xl font-bold ${winRate >= 50 ? 'profit' : 'loss'}">${winRate}%</div>
+        </div>
+        <div class="bg-zinc-900 border border-zinc-800 rounded-2xl p-4">
+          <div class="text-zinc-400 text-xs">总盈亏</div>
+          <div class="text-2xl font-bold ${totalPL >= 0 ? 'profit' : 'loss'}">
+            $${totalPL.toLocaleString('en-US', {minimumFractionDigits: 2})}
+          </div>
+        </div>
+        <div class="bg-zinc-900 border border-zinc-800 rounded-2xl p-4">
+          <div class="text-zinc-400 text-xs">当前余额</div>
+          <div class="text-2xl font-bold">$${finalBal.toLocaleString('en-US', {minimumFractionDigits: 2})}</div>
+        </div>
+      `;
+
+      html += `<div class="bg-zinc-900 border border-zinc-800 rounded-2xl p-4 lg:col-span-2">
+        <div class="text-zinc-400 text-xs mb-2">Top 币种盈亏</div>
+        <table class="w-full text-sm"><tbody>`;
+      if (topCoins.length === 0) {
+        html += `<tr><td colspan="2" class="text-center text-zinc-500 py-2">暂无币种记录</td></tr>`;
+      } else {
+        topCoins.forEach(c => {
+          html += `<tr><td class="text-left">${c.coin}</td><td class="text-right ${c.pl >= 0 ? 'profit' : 'loss'}">$${c.pl.toLocaleString('en-US', {minimumFractionDigits: 2})}</td></tr>`;
+        });
+      }
+      html += `</tbody></table></div>`;
+
+      html += `<div class="bg-zinc-900 border border-zinc-800 rounded-2xl p-4 lg:col-span-2">
+        <div class="text-zinc-400 text-xs mb-2">常见情绪/行为</div>
+        <div class="flex flex-wrap gap-2">`;
+      topTags.forEach(t => html += `<span class="tag">${t.tag} ×${t.count}</span>`);
+      if (topTags.length === 0) html += `<span class="text-zinc-500">暂无标签</span>`;
+      html += `</div></div>`;
+
+      document.getElementById('stats').innerHTML = html;
+    }
+
+    function renderTable() {
+      const tbody = document.getElementById('tbody');
+      const displayEntries = [...sortedEntries].reverse();
+
+      let html = '';
+      let balance = initialCapital;
+      const cumMap = {};
+
+      sortedEntries.forEach(e => {
+        balance += e.deposit - e.withdrawal + e.change;
+        cumMap[e.id] = balance;
+      });
+
+      displayEntries.forEach(e => {
+        const plClass = e.change > 0 ? 'profit' : e.change < 0 ? 'loss' : 'flat';
+        const plSign = e.change > 0 ? '+' : '';
+        const tagsHtml = e.tags.map(t => `<span class="tag">${t}</span>`).join('');
+
+        let noteDisplay = e.notes;
+        let noteClass = '';
+        let onclick = '';
+        if (e.notes.length > 50) {
+          noteDisplay = e.notes.substring(0, 47) + '...';
+          noteClass = 'text-blue-400 hover:underline cursor-pointer';
+          const escapedNote = e.notes.replace(/'/g, "\\'").replace(/"/g, '\\"');
+          onclick = `onclick="showFullNote('${escapedNote}')"`; 
+        }
+
+        html += `
+          <tr class="border-b border-zinc-800 hover:bg-zinc-800/50">
+            <td>${e.date}</td>
+            <td class="font-medium">${e.coin || '—'}</td>
+            <td class="text-right ${plClass}">${plSign}$${Math.abs(e.change).toLocaleString('en-US', {minimumFractionDigits: 2})}</td>
+            <td class="text-right text-blue-400">$${e.deposit.toLocaleString('en-US', {minimumFractionDigits: 2})}</td>
+            <td class="text-right text-orange-400">$${e.withdrawal.toLocaleString('en-US', {minimumFractionDigits: 2})}</td>
+            <td class="text-right font-medium">$${cumMap[e.id].toLocaleString('en-US', {minimumFractionDigits: 2})}</td>
+            <td>${tagsHtml || '—'}</td>
+            <td class="${noteClass}" ${onclick}>${noteDisplay}</td>
+            <td><button onclick="deleteEntry(${e.id})" class="text-red-400 hover:text-red-500 text-xs">删</button></td>
+          </tr>`;
+      });
+
+      tbody.innerHTML = html || `<tr><td colspan="9" class="text-center py-12 text-zinc-500">还没有记录～</td></tr>`;
+    }
+
+    function renderChart() {
+      const ctx = document.getElementById('fundChart');
+      let balance = initialCapital;
+      const labels = ['起始'];
+      const data = [initialCapital];
+
+      sortedEntries.forEach(e => {
+        balance += e.deposit - e.withdrawal + e.change;
+        labels.push(e.date);
+        data.push(balance);
+      });
+
+      if (chartInstance) chartInstance.destroy();
+      chartInstance = new Chart(ctx, {
+        type: 'line',
+        data: {
+          labels,
+          datasets: [{
+            label: '账户余额 ($)',
+            data,
+            borderColor: '#10b981',
+            backgroundColor: 'rgba(16, 185, 129, 0.08)',
+            tension: 0.3,
+            borderWidth: 3,
+            pointRadius: 5,
+            pointBackgroundColor: '#10b981'
+          }]
+        },
+        options: {
+          responsive: true,
+          plugins: { legend: { display: false } },
+          scales: {
+            y: { grid: { color: '#27272a' }, ticks: { color: '#a1a1aa' } },
+            x: { grid: { color: '#27272a' }, ticks: { color: '#a1a1aa', maxRotation: 45 } }
+          }
+        }
+      });
+    }
+
+    function renderAll() {
+      renderStats();
+      renderTable();
+      renderChart();
+    }
+
+    function exportCSV() {
+      if (!entries.length) return alert('无数据');
+      let csv = '\uFEFF日期,币种,交易盈亏($),充值($),提现($),余额($),标签,笔记\n';
+      const cum = calculateCumulative();
+      cum.forEach(e => {
+        const tagsStr = e.tags.join('; ');
+        const notesEsc = (e.notes || '').replace(/"/g, '""');
+        csv += `"${e.date}","${e.coin || ''}",${Number(e.change).toFixed(2)},${Number(e.deposit).toFixed(2)},${Number(e.withdrawal).toFixed(2)},${Number(e.balance).toFixed(2)},"${tagsStr}","${notesEsc}"\n`;
+      });
+      const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `meme记录_${new Date().toISOString().slice(0,10)}.csv`;
+      link.click();
+      URL.revokeObjectURL(url);
+    }
+
+    function exportExcel() {
+      if (!entries.length) return alert('无数据');
+      const cum = calculateCumulative();
+
+      const header = ["日期", "币种", "交易盈亏($)", "充值($)", "提现($)", "账户余额($)", "标签", "笔记"];
+      const rows = cum.map(e => [
+        e.date,
+        e.coin || '',
+        e.change,
+        e.deposit,
+        e.withdrawal,
+        e.balance,
+        e.tags.join('; '),
+        e.notes
+      ]);
+
+      const wsData = [header, ...rows];
+      const ws = XLSX.utils.aoa_to_sheet(wsData);
+
+      ws['!cols'] = [{wch:12}, {wch:10}, {wch:14}, {wch:12}, {wch:12}, {wch:14}, {wch:30}, {wch:60}];
+
+      const range = XLSX.utils.decode_range(ws['!ref']);
+      for (let R = 1; R <= range.e.r; ++R) {
+        for (let C = 2; C <= 5; ++C) {
+          const addr = XLSX.utils.encode_cell({c:C, r:R});
+          if (ws[addr]) ws[addr].z = '#,##0.00';
+        }
+      }
+
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, "交易记录");
+      XLSX.writeFile(wb, `meme记录_${new Date().toISOString().slice(0,10)}.xlsx`);
+    }
+
+    function clearAll() {
+      if (!confirm('确定清空所有记录？不可恢复！')) return;
+      localStorage.removeItem('memeTrackerUSD_ZH_v2');
+      localStorage.removeItem('memeTrackerUSD_ZH');
+      initialCapital = 10000;
+      entries = [];
+      updateSortedEntries();
+      loadData();
+    }
+
+    window.onload = loadData;
+  </script>
+</body>
+</html>
